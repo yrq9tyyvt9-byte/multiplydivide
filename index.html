@@ -28,15 +28,16 @@
   }
   .admin-dot {
     position: fixed;
-    right: calc(12px + env(safe-area-inset-right, 0px));
-    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-    width: 10px;
-    height: 10px;
+    right: calc(14px + env(safe-area-inset-right, 0px));
+    bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+    width: 14px;
+    height: 14px;
     padding: 0;
     border: none;
     border-radius: 50%;
-    background: var(--line);
-    opacity: .6;
+    background: var(--ink-soft);
+    opacity: .45;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
     cursor: pointer;
     z-index: 500;
   }
@@ -75,10 +76,16 @@
     width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer;
   }
   .admin-empty { color: var(--ink-soft); font-size: 14px; padding: 20px 0; text-align: center; }
-  .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .admin-table th, .admin-table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); color: var(--ink); }
-  .admin-table th { color: var(--ink-soft); font-weight: 600; font-size: 12px; }
-  .admin-grade-cell { font-weight: 700; }
+  .admin-list { display: flex; flex-direction: column; gap: 10px; }
+  .admin-item { border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; }
+  .admin-item-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+  .admin-item-main { font-size: 13px; color: var(--ink); display: flex; align-items: center; }
+  .admin-item-meta { margin-top: 4px; font-size: 12px; color: var(--ink-soft); }
+  .admin-grade-cell { font-weight: 700; font-size: 15px; }
+  .admin-mistakes { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+  .admin-mistakes-label { font-size: 11px; color: var(--ink-soft); margin-bottom: 3px; }
+  .admin-mistake-row { font-size: 12px; color: var(--bad); margin-top: 2px; }
+  .admin-ok-note { margin-top: 8px; font-size: 12px; color: var(--good); }
   .admin-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
   .admin-clear {
     border: none; background: transparent; color: var(--ink-soft);
@@ -779,15 +786,28 @@
   function finish() {
     show("result");
     var score = 0;
+    var mistakes = [];
     for (var i = 0; i < state.questions.length; i++) {
-      if (state.questions[i].result === true) score++;
+      if (state.questions[i].result === true) {
+        score++;
+      } else if (state.questions[i].result === false) {
+        mistakes.push({
+          a: state.questions[i].a,
+          b: state.questions[i].b,
+          given: state.questions[i].given,
+          correct: state.questions[i].correct
+        });
+      }
     }
     var g = gradeFor(score, state.total);
     el.gradeNum.textContent = g.num;
     el.gradeWord.textContent = g.word;
     el.scoreText.textContent = score + " / " + state.total;
-    saveResult(state.mode, score, state.total, g);
-    el.timeNote.innerHTML = state.timedOut ? " &middot; ⏱ czas minął" : "";
+    var elapsedMs = state.startedAt ? (Date.now() - state.startedAt) : null;
+    saveResult(state.mode, score, state.total, g, elapsedMs, mistakes);
+    el.timeNote.innerHTML =
+      (elapsedMs !== null ? "⏱ czas rozwiązania: " + fmtDuration(elapsedMs) : "") +
+      (state.timedOut ? " &middot; czas testu minął" : "");
 
     el.resultMode.textContent = state.mode === "mult" ? "Mnożenie" : "Dzielenie";
     el.resultMode.className = "pill mode-tag " + (state.mode === "mult" ? "mult" : "div");
@@ -833,7 +853,8 @@
       timeLeft: chosenSeconds,
       timedOut: false,
       intervalId: null,
-      locked: false
+      locked: false,
+      startedAt: Date.now()
     };
     el.modeTag.textContent = mode === "mult" ? "Mnożenie" : "Dzielenie";
     el.modeTag.className = "pill mode-tag " + (mode === "mult" ? "mult" : "div");
@@ -898,7 +919,7 @@
     }
   }
 
-  function saveResult(mode, score, total, grade) {
+  function saveResult(mode, score, total, grade, elapsedMs, mistakes) {
     try {
       var list = loadResults();
       list.unshift({
@@ -907,13 +928,24 @@
         score: score,
         total: total,
         gradeNum: grade.num,
-        gradeWord: grade.word
+        gradeWord: grade.word,
+        ms: (typeof elapsedMs === "number" && !isNaN(elapsedMs)) ? elapsedMs : null,
+        mistakes: mistakes || []
       });
       if (list.length > ADMIN_MAX) list = list.slice(0, ADMIN_MAX);
       localStorage.setItem(ADMIN_KEY, JSON.stringify(list));
     } catch (e) {
       // brak dostępu do localStorage (np. tryb prywatny) — pomijamy zapis
     }
+  }
+
+  function fmtDuration(ms) {
+    if (typeof ms !== "number" || isNaN(ms) || ms < 0) return "—";
+    var totalSec = Math.round(ms / 1000);
+    var m = Math.floor(totalSec / 60);
+    var s = totalSec % 60;
+    var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+    return m + ":" + pad(s);
   }
 
   function fmtDate(ts) {
@@ -939,22 +971,33 @@
       el.adminBody.innerHTML = '<p class="admin-empty">Brak zapisanych wyników na tym urządzeniu.</p>';
       return;
     }
-    var rows = "";
+    var html = '<div class="admin-list">';
     for (var i = 0; i < list.length; i++) {
       var r = list[i];
       var modeLabel = r.mode === "mult" ? "Mnożenie" : "Dzielenie";
-      rows +=
-        "<tr>" +
-        "<td>" + fmtDate(r.t) + "</td>" +
-        "<td>" + modeLabel + "</td>" +
-        "<td>" + r.score + " / " + r.total + "</td>" +
-        '<td class="admin-grade-cell" style="color:' + gradeColor(r.gradeNum) + '">' + r.gradeNum + "</td>" +
-        "</tr>";
+      var sym = r.mode === "mult" ? "×" : "÷";
+      html += '<div class="admin-item">';
+      html += '<div class="admin-item-head">';
+      html += '<span class="admin-item-main">' + fmtDate(r.t) + ' &middot; ' + modeLabel + '</span>';
+      html += '<span class="admin-item-main"><span class="admin-grade-cell" style="color:' + gradeColor(r.gradeNum) + '">' + r.gradeNum + '</span>&nbsp;&middot;&nbsp;' + r.score + ' / ' + r.total + '</span>';
+      html += '</div>';
+      html += '<div class="admin-item-meta">Czas rozwiązania: ' + fmtDuration(r.ms) + '</div>';
+      if (r.mistakes && r.mistakes.length) {
+        html += '<div class="admin-mistakes"><div class="admin-mistakes-label">Błędy (' + r.mistakes.length + '):</div>';
+        for (var k = 0; k < r.mistakes.length; k++) {
+          var m = r.mistakes[k];
+          var givenTxt = (m.given === null || m.given === undefined) ? "brak odpowiedzi" : m.given;
+          html += '<div class="admin-mistake-row">' + m.a + ' ' + sym + ' ' + m.b + ' = ' + m.correct +
+            ' — podano: ' + givenTxt + '</div>';
+        }
+        html += '</div>';
+      } else {
+        html += '<div class="admin-ok-note">Brak błędów 🎉</div>';
+      }
+      html += '</div>';
     }
-    el.adminBody.innerHTML =
-      '<table class="admin-table"><thead><tr>' +
-      "<th>Data</th><th>Tryb</th><th>Wynik</th><th>Ocena</th>" +
-      "</tr></thead><tbody>" + rows + "</tbody></table>";
+    html += '</div>';
+    el.adminBody.innerHTML = html;
   }
 
   function openAdmin() {
