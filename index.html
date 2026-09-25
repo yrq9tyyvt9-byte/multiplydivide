@@ -26,6 +26,65 @@
     --font-display: "Fredoka", "Trebuchet MS", system-ui, sans-serif;
     --font-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
+  .admin-dot {
+    position: fixed;
+    right: calc(12px + env(safe-area-inset-right, 0px));
+    bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    width: 10px;
+    height: 10px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: var(--line);
+    opacity: .6;
+    cursor: pointer;
+    z-index: 500;
+  }
+  .admin-dot:hover { opacity: 1; background: var(--accent); }
+
+  .admin-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    z-index: 900;
+    padding: 0;
+  }
+  .admin-overlay[hidden] { display: none; }
+  .admin-panel {
+    width: 100%;
+    max-width: 560px;
+    max-height: 82vh;
+    background: var(--card);
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+    padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+  @media (min-width: 640px) {
+    .admin-overlay { align-items: center; }
+    .admin-panel { border-radius: 20px; max-height: 78vh; }
+  }
+  .admin-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+  .admin-head h2 { margin: 0; font-size: 18px; color: var(--ink); }
+  .admin-close {
+    border: none; background: var(--bg); color: var(--ink-soft);
+    width: 30px; height: 30px; border-radius: 50%; font-size: 16px; cursor: pointer;
+  }
+  .admin-empty { color: var(--ink-soft); font-size: 14px; padding: 20px 0; text-align: center; }
+  .admin-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .admin-table th, .admin-table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); color: var(--ink); }
+  .admin-table th { color: var(--ink-soft); font-weight: 600; font-size: 12px; }
+  .admin-grade-cell { font-weight: 700; }
+  .admin-foot { margin-top: 14px; display: flex; justify-content: flex-end; }
+  .admin-clear {
+    border: none; background: transparent; color: var(--ink-soft);
+    font-size: 12px; text-decoration: underline; cursor: pointer; padding: 4px;
+  }
+
   :root:not([data-theme="light"]) {
     @media (prefers-color-scheme: dark) {
       --bg: #17122e;
@@ -422,6 +481,21 @@
   </section>
 </div>
 
+<button class="admin-dot" id="adminDot" aria-label="Panel administracyjny" title="Panel administracyjny"></button>
+
+<div class="admin-overlay" id="adminOverlay" hidden>
+  <div class="admin-panel">
+    <div class="admin-head">
+      <h2>Panel administracyjny</h2>
+      <button class="admin-close" id="adminCloseBtn" aria-label="Zamknij">✕</button>
+    </div>
+    <div id="adminBody"></div>
+    <div class="admin-foot">
+      <button class="admin-clear" id="adminClearBtn">Wyczyść historię</button>
+    </div>
+  </div>
+</div>
+
 <script>
 (function () {
   "use strict";
@@ -452,7 +526,12 @@
     review: document.getElementById("review"),
     againBtn: document.getElementById("againBtn"),
     homeBtn: document.getElementById("homeBtn"),
-    timeBtns: document.querySelectorAll(".time-btn")
+    timeBtns: document.querySelectorAll(".time-btn"),
+    adminDot: document.getElementById("adminDot"),
+    adminOverlay: document.getElementById("adminOverlay"),
+    adminBody: document.getElementById("adminBody"),
+    adminCloseBtn: document.getElementById("adminCloseBtn"),
+    adminClearBtn: document.getElementById("adminClearBtn")
   };
 
   el.ringFg.style.strokeDasharray = RING_CIRC;
@@ -707,6 +786,7 @@
     el.gradeNum.textContent = g.num;
     el.gradeWord.textContent = g.word;
     el.scoreText.textContent = score + " / " + state.total;
+    saveResult(state.mode, score, state.total, g);
     el.timeNote.innerHTML = state.timedOut ? " &middot; ⏱ czas minął" : "";
 
     el.resultMode.textContent = state.mode === "mult" ? "Mnożenie" : "Dzielenie";
@@ -802,6 +882,99 @@
   el.homeBtn.addEventListener("click", function () {
     stopTimer();
     show("start");
+  });
+
+  // ---------- Panel administracyjny (historia wyników na tym urządzeniu) ----------
+  var ADMIN_KEY = "matma_wyniki_v1";
+  var ADMIN_MAX = 200;
+
+  function loadResults() {
+    try {
+      var raw = localStorage.getItem(ADMIN_KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function saveResult(mode, score, total, grade) {
+    try {
+      var list = loadResults();
+      list.unshift({
+        t: Date.now(),
+        mode: mode,
+        score: score,
+        total: total,
+        gradeNum: grade.num,
+        gradeWord: grade.word
+      });
+      if (list.length > ADMIN_MAX) list = list.slice(0, ADMIN_MAX);
+      localStorage.setItem(ADMIN_KEY, JSON.stringify(list));
+    } catch (e) {
+      // brak dostępu do localStorage (np. tryb prywatny) — pomijamy zapis
+    }
+  }
+
+  function fmtDate(ts) {
+    try {
+      var d = new Date(ts);
+      var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+      return pad(d.getDate()) + "." + pad(d.getMonth() + 1) + " " + pad(d.getHours()) + ":" + pad(d.getMinutes());
+    } catch (e) {
+      return "";
+    }
+  }
+
+  function gradeColor(num) {
+    var n = parseInt(num, 10);
+    if (n >= 5) return "var(--good)";
+    if (n >= 3) return "var(--accent)";
+    return "var(--bad)";
+  }
+
+  function renderAdmin() {
+    var list = loadResults();
+    if (!list.length) {
+      el.adminBody.innerHTML = '<p class="admin-empty">Brak zapisanych wyników na tym urządzeniu.</p>';
+      return;
+    }
+    var rows = "";
+    for (var i = 0; i < list.length; i++) {
+      var r = list[i];
+      var modeLabel = r.mode === "mult" ? "Mnożenie" : "Dzielenie";
+      rows +=
+        "<tr>" +
+        "<td>" + fmtDate(r.t) + "</td>" +
+        "<td>" + modeLabel + "</td>" +
+        "<td>" + r.score + " / " + r.total + "</td>" +
+        '<td class="admin-grade-cell" style="color:' + gradeColor(r.gradeNum) + '">' + r.gradeNum + "</td>" +
+        "</tr>";
+    }
+    el.adminBody.innerHTML =
+      '<table class="admin-table"><thead><tr>' +
+      "<th>Data</th><th>Tryb</th><th>Wynik</th><th>Ocena</th>" +
+      "</tr></thead><tbody>" + rows + "</tbody></table>";
+  }
+
+  function openAdmin() {
+    renderAdmin();
+    el.adminOverlay.hidden = false;
+  }
+  function closeAdmin() {
+    el.adminOverlay.hidden = true;
+  }
+
+  el.adminDot.addEventListener("click", openAdmin);
+  el.adminCloseBtn.addEventListener("click", closeAdmin);
+  el.adminOverlay.addEventListener("click", function (e) {
+    if (e.target === el.adminOverlay) closeAdmin();
+  });
+  el.adminClearBtn.addEventListener("click", function () {
+    if (window.confirm("Usunąć całą historię wyników z tego urządzenia?")) {
+      try { localStorage.removeItem(ADMIN_KEY); } catch (e) {}
+      renderAdmin();
+    }
   });
 
 })();
