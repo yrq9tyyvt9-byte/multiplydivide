@@ -1,4 +1,12 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sprawdzian z Matmy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #f4f2fb;
@@ -327,12 +335,23 @@
     * { transition: none !important; }
   }
 </style>
+<style>
+  :root {
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+</style>
+</head>
+<body>
+
 
 <div class="wrap">
   <!-- ============ START ============ -->
   <section class="card" id="screen-start">
     <h1 class="brand"><span class="x">×</span> Sprawdzian z Matmy <span class="d">÷</span></h1>
-    <p class="subtitle">10 działań, jeden licznik na cały test.</p>
+    <p class="subtitle">Kilka działań, jeden licznik na cały test.</p>
 
     <div class="time-choice" role="group" aria-label="Czas na cały test">
       <span class="time-label">Czas na cały test:</span>
@@ -344,15 +363,15 @@
 
     <div class="mode-btns">
       <button class="mode mult" data-mode="mult">
-        <span><span>Mnożenie</span><small>10 działań &middot; np. 7 × 8, 5 × 30</small></span>
+        <span><span>Mnożenie</span><small>10 działań &middot; liczby 1–10, wynik do 100</small></span>
         <span class="glyph">×</span>
       </button>
       <button class="mode div" data-mode="div">
-        <span><span>Dzielenie</span><small>10 działań &middot; np. 56 ÷ 8, 160 ÷ 4</small></span>
+        <span><span>Dzielenie</span><small>10 działań &middot; dzielnik 1–10, dzielna do 100</small></span>
         <span class="glyph">÷</span>
       </button>
     </div>
-    <p class="info">Licznik odlicza cały test — nie resetuje się między działaniami.<br>Pominięte wracają na końcu i też muszą zmieścić się w czasie.<br>Ocena jak w 4. klasie: 10/10 = <b>6</b>, 9/10 = <b>5</b>…</p>
+    <p class="info">Licznik odlicza cały test — nie resetuje się między działaniami.<br>Pominięte wracają na końcu i też muszą zmieścić się w czasie.<br>Ocena jak w 4. klasie, zależnie od % poprawnych odpowiedzi.</p>
   </section>
 
   <!-- ============ TEST ============ -->
@@ -449,36 +468,31 @@
   function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
   function choice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
-  // Mnożenie: czynniki i wynik ≤ 150, "ładne" na oko (np. 12×5, 20×7, 15×6).
-  // Jeden czynnik jest prosty: ×2..×9 albo okrągła dziesiątka (20,30…), drugi
-  // dobierany tak, by wynik ≤ 150. Nigdy dwie "brzydkie" duże liczby.
+  // Mnożenie: tabliczka mnożenia — oba czynniki 2..10, wynik zawsze ≤ 100.
   function makeMultiplication() {
     var guard = 0;
     while (guard++ < 200) {
-      var big, small;
-      var kind = Math.random();
-      if (kind < 0.45) {
-        // tabliczka do 10×10
-        big = randInt(2, 10);
-        small = randInt(2, 10);
-      } else if (kind < 0.75) {
-        // "nastka" × jednocyfrowa: 11..15 × 2..9  (np. 12×5, 15×6)
-        big = randInt(11, 15);
-        small = randInt(2, Math.floor(150 / big)); // wynik ≤ 150
-        if (small < 2) continue;
-      } else {
-        // okrągła dziesiątka × jednocyfrowa: 20,30,40… × 2..7 (np. 20×7)
-        var tens = randInt(2, 7) * 10; // 20..70
-        small = randInt(2, Math.floor(150 / tens));
-        if (small < 2) continue;
-        big = tens;
-      }
-      if (big * small > 150 || big * small < 6) continue;
-      // losowa kolejność czynników
-      if (Math.random() < 0.5) return { a: big, b: small, op: "mult" };
-      return { a: small, b: big, op: "mult" };
+      var a = randInt(2, 10);
+      var b = randInt(2, 10);
+      if (a * b > 100) continue;
+      return { a: a, b: b, op: "mult" };
     }
-    return { a: 12, b: 5, op: "mult" }; // fallback
+    return { a: 8, b: 9, op: "mult" }; // fallback
+  }
+
+  function buildMultiplicationQuestions(total) {
+    var list = [];
+    var seen = {};
+    var guard = 0;
+    while (list.length < total && guard < 500) {
+      guard++;
+      var q = makeMultiplication();
+      var key = q.a + "_" + q.b;
+      if (seen[key]) continue;
+      seen[key] = true;
+      list.push(q);
+    }
+    return list;
   }
 
   // Dzielenie: dzielna ≤ 150, dzielnik ≤ 5, "ładne" ilorazy (np. 150÷5, 120÷4).
@@ -486,38 +500,27 @@
   function makeDivision() {
     var guard = 0;
     while (guard++ < 200) {
-      var divisor = randInt(2, 5);            // dzielnik ≤ 5
-      var maxQ = Math.floor(150 / divisor);
-      var quotient;
-      if (Math.random() < 0.55) {
-        // prosty iloraz do 2..12 (56÷4=14 itp. — łatwe)
-        quotient = randInt(2, Math.min(12, maxQ));
-      } else {
-        // okrągły iloraz: dziesiątki albo wielokrotności 5 (150÷5=30, 120÷4=30)
-        var step = Math.random() < 0.5 ? 10 : 5;
-        var maxK = Math.floor(maxQ / step);
-        if (maxK < 2) continue;
-        quotient = randInt(2, maxK) * step;
-      }
-      if (quotient < 2) continue;
+      var divisor = randInt(2, 10);
+      var quotient = randInt(2, 10);
       var dividend = divisor * quotient;
-      if (dividend > 150) continue;
+      if (dividend > 100) continue;
       return { a: dividend, b: divisor, op: "div", answer: quotient };
     }
-    return { a: 150, b: 5, op: "div", answer: 30 }; // fallback
+    return { a: 100, b: 10, op: "div", answer: 10 }; // fallback
   }
 
   function correctAnswer(q) {
     return q.op === "mult" ? q.a * q.b : q.answer;
   }
 
-  function buildQuestions(mode) {
+  function buildQuestions(mode, total) {
+    if (mode === "mult") return buildMultiplicationQuestions(total);
     var list = [];
     var seen = {};
     var guard = 0;
-    while (list.length < QUESTIONS_PER_TEST && guard < 500) {
+    while (list.length < total && guard < 500) {
       guard++;
-      var q = mode === "mult" ? makeMultiplication() : makeDivision();
+      var q = makeDivision();
       var key = q.a + "_" + q.b + "_" + q.op;
       if (seen[key]) continue;
       seen[key] = true;
@@ -577,7 +580,7 @@
     var opClass = q.op === "mult" ? "op-mult" : "op-div";
     var sym = q.op === "mult" ? "×" : "÷";
     el.question.innerHTML = q.a + ' <span class="' + opClass + '">' + sym + '</span> ' + q.b + ' <span class="eq">=</span>';
-    el.counter.textContent = answeredCount() + " / " + QUESTIONS_PER_TEST;
+    el.counter.textContent = answeredCount() + " / " + state.total;
     el.answer.value = "";
     el.feedback.textContent = "";
     el.feedback.className = "feedback";
@@ -683,17 +686,15 @@
     // timer NIE jest tu restartowany — leci nieprzerwanie od startu testu
   }
 
-  // ---------- Grading (4. klasa) ----------
-  function gradeFor(score) {
-    // score = liczba poprawnych z 10
-    switch (score) {
-      case 10: return { num: "6", word: "Celujący! 🌟" };
-      case 9:  return { num: "5", word: "Bardzo dobry!" };
-      case 8:  return { num: "4", word: "Dobry" };
-      case 7:  return { num: "3", word: "Dostateczny" };
-      case 6:  return { num: "2", word: "Dopuszczający" };
-      default: return { num: "1", word: "Trzeba jeszcze poćwiczyć" };
-    }
+  // ---------- Grading (4. klasa, wg % poprawnych — działa dla dowolnej liczby pytań) ----------
+  function gradeFor(score, total) {
+    var pct = total > 0 ? score / total : 0;
+    if (pct >= 1)    return { num: "6", word: "Celujący! 🌟" };
+    if (pct >= 0.9)  return { num: "5", word: "Bardzo dobry!" };
+    if (pct >= 0.8)  return { num: "4", word: "Dobry" };
+    if (pct >= 0.7)  return { num: "3", word: "Dostateczny" };
+    if (pct >= 0.6)  return { num: "2", word: "Dopuszczający" };
+    return { num: "1", word: "Trzeba jeszcze poćwiczyć" };
   }
 
   function finish() {
@@ -702,10 +703,10 @@
     for (var i = 0; i < state.questions.length; i++) {
       if (state.questions[i].result === true) score++;
     }
-    var g = gradeFor(score);
+    var g = gradeFor(score, state.total);
     el.gradeNum.textContent = g.num;
     el.gradeWord.textContent = g.word;
-    el.scoreText.textContent = score + " / " + QUESTIONS_PER_TEST;
+    el.scoreText.textContent = score + " / " + state.total;
     el.timeNote.innerHTML = state.timedOut ? " &middot; ⏱ czas minął" : "";
 
     el.resultMode.textContent = state.mode === "mult" ? "Mnożenie" : "Dzielenie";
@@ -738,11 +739,13 @@
 
   // ---------- Start a test ----------
   function startTest(mode) {
-    var questions = buildQuestions(mode);
+    var total = QUESTIONS_PER_TEST;
+    var questions = buildQuestions(mode, total);
     var queue = [];
     for (var i = 0; i < questions.length; i++) queue.push(i);
     state = {
       mode: mode,
+      total: total,
       questions: questions,
       queue: queue,
       reviewingSkipped: false,
@@ -803,3 +806,6 @@
 
 })();
 </script>
+
+</body>
+</html>
